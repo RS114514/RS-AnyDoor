@@ -1325,9 +1325,9 @@
                 runThemeScan(nextTheme);
             };
             const syncSystemTheme = () => {
-                const systemTheme = getSystemTheme();
-                applyTheme(systemTheme);
-                localStorage.setItem(THEME_KEY, systemTheme);
+                const stored = localStorage.getItem(THEME_KEY);
+                if (stored === "light" || stored === "dark") return;
+                applyTheme(getSystemTheme());
             };
             const runThemeScan = (nextTheme) => {
                 applyTheme(nextTheme);
