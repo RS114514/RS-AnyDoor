@@ -1231,6 +1231,8 @@
             const profileNameInput = document.getElementById("profile-name");
             const settingsNavButtons = document.querySelectorAll(".settings-nav button");
             const settingsPanels = document.querySelectorAll(".settings-panel");
+            const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+            const themeMedia = window.matchMedia("(prefers-color-scheme: light)");
             const HISTORY_KEY = "rsSearchHistory";
             const HISTORY_DISPLAY_LIMIT = 5;
             const HISTORY_STORE_LIMIT = 50;
@@ -1305,36 +1307,70 @@
                     }, 300);
                 });
             };
-            const applyTheme = (theme) => {
-                if (!themeToggle) return;
-                const isLight = theme === "light";
-                document.body.classList.toggle("light", isLight);
-                themeToggle.textContent = isLight ? "日" : "月";
-                themeToggle.setAttribute("aria-label", isLight ? "切换到深色模式" : "切换到浅色模式");
+            const isThemeValue = (value) => value === "light" || value === "dark";
+            const readStoredTheme = () => {
+                try {
+                    const stored = localStorage.getItem(THEME_KEY);
+                    return isThemeValue(stored) ? stored : null;
+                } catch {
+                    return null;
+                }
             };
-            const getSystemTheme = () =>
-                window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-            const loadTheme = () => {
-                const stored = localStorage.getItem(THEME_KEY);
-                if (stored === "light" || stored === "dark") return stored;
-                return getSystemTheme();
+            const saveTheme = (theme) => {
+                if (!isThemeValue(theme)) return;
+                try {
+                    localStorage.setItem(THEME_KEY, theme);
+                } catch {
+                    /* noop */
+                }
             };
-            const toggleTheme = () => {
-                const nextTheme = document.body.classList.contains("light") ? "dark" : "light";
-                localStorage.setItem(THEME_KEY, nextTheme);
-                runThemeScan(nextTheme);
+            const getSystemTheme = () => (themeMedia.matches ? "light" : "dark");
+            const themeState = {
+                manualTheme: null,
+                resolvedTheme: "dark"
             };
-            const syncSystemTheme = () => {
-                const stored = localStorage.getItem(THEME_KEY);
-                if (stored === "light" || stored === "dark") return;
-                applyTheme(getSystemTheme());
-            };
-            const runThemeScan = (nextTheme) => {
-                applyTheme(nextTheme);
-                if (!themeScan) return;
+            const runThemeScan = () => {
+                if (!themeScan || prefersReducedMotion) return;
                 themeScan.classList.remove("active");
                 void themeScan.offsetHeight;
                 themeScan.classList.add("active");
+            };
+            const renderTheme = (theme, withScan) => {
+                const isLight = theme === "light";
+                document.body.classList.toggle("light", isLight);
+                document.body.setAttribute("data-theme", theme);
+                document.documentElement.style.colorScheme = isLight ? "light" : "dark";
+                if (themeColorMeta) {
+                    themeColorMeta.setAttribute("content", isLight ? "#f8fafc" : "#010511");
+                }
+                if (themeToggle) {
+                    themeToggle.textContent = isLight ? "日" : "月";
+                    themeToggle.setAttribute("aria-label", isLight ? "切换到深色模式" : "切换到浅色模式");
+                }
+                // Force repaint after theme change to reduce stale paint artifacts.
+                void document.body.offsetHeight;
+                if (withScan) {
+                    runThemeScan();
+                }
+            };
+            const applyResolvedTheme = (withScan = false) => {
+                const resolvedTheme = themeState.manualTheme || getSystemTheme();
+                themeState.resolvedTheme = resolvedTheme;
+                renderTheme(resolvedTheme, withScan);
+            };
+            const toggleTheme = () => {
+                const nextTheme = themeState.resolvedTheme === "light" ? "dark" : "light";
+                themeState.manualTheme = nextTheme;
+                saveTheme(nextTheme);
+                applyResolvedTheme(true);
+            };
+            const syncSystemTheme = () => {
+                if (themeState.manualTheme) return;
+                applyResolvedTheme();
+            };
+            const initTheme = () => {
+                themeState.manualTheme = readStoredTheme();
+                applyResolvedTheme();
             };
             if (themeScan) {
                 themeScan.addEventListener("animationend", () => {
@@ -1550,11 +1586,10 @@
                 persistStats();
             };
 
+            initTheme();
             if (themeToggle) {
-                applyTheme(loadTheme());
                 themeToggle.addEventListener("click", toggleTheme);
             }
-            const themeMedia = window.matchMedia("(prefers-color-scheme: light)");
             if (themeMedia.addEventListener) {
                 themeMedia.addEventListener("change", syncSystemTheme);
             } else if (themeMedia.addListener) {
